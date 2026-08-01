@@ -170,7 +170,7 @@ docker volume prune
 
 ---
 
-# ❓ Interview Questions & Answers
+# ❓ Questions & Answers
 
 ### Q1. CMD vs ENTRYPOINT — What's the difference?
 
