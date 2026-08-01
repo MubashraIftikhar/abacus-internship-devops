@@ -1,250 +1,306 @@
-\# 🐳 Docker
+# 🐳 Docker
 
+## 📌 What is Docker?
 
+Docker is an open-source containerization platform that allows developers to package applications along with all their dependencies (libraries, configs, runtime) into a single lightweight, portable unit called a **container**. Unlike virtual machines, containers share the host OS kernel, making them faster to start and much more resource-efficient. This ensures the application runs consistently across different environments — "it works on my machine" problems are eliminated.
 
-\## 📌 What is Docker?
+---
 
+## 🏗️ Docker Architecture
 
-
-Docker is an open-source containerization platform that allows developers to package applications along with all their dependencies (libraries, configs, runtime) into a single lightweight, portable unit called a \*\*container\*\*. Unlike virtual machines, containers share the host OS kernel, making them faster to start and much more resource-efficient. This ensures the application runs consistently across different environments — "it works on my machine" problems are eliminated.
-
-
-
-\## 🏗️ Docker Architecture
-
-
-
-Docker follows a \*\*client-server architecture\*\*:
-
-
+Docker follows a **client-server architecture**:
 
 ```mermaid
-
 graph LR
-
-&#x20;   A\[Docker Client<br/>CLI] -->|REST API| B\[Docker Daemon<br/>dockerd]
-
-&#x20;   B --> C\[Images]
-
-&#x20;   B --> D\[Containers]
-
-&#x20;   B --> E\[Networks]
-
-&#x20;   B --> F\[Volumes]
-
-&#x20;   B <-->|pull/push| G\[Docker Registry<br/>Docker Hub]
-
+    A[Docker Client<br/>CLI] -->|REST API| B[Docker Daemon<br/>dockerd]
+    B --> C[Images]
+    B --> D[Containers]
+    B --> E[Networks]
+    B --> F[Volumes]
+    B <-->|pull/push| G[Docker Registry<br/>Docker Hub]
 ```
 
+### Components
 
+- **Docker Client** – The CLI/tool used to interact with Docker (`docker build`, `docker run`, etc.)
+- **Docker Daemon (dockerd)** – Background service that manages images, containers, networks, and volumes.
+- **Docker Registry** – Stores Docker images (e.g., Docker Hub); used to pull and push images.
+- **Docker Objects** – Images, Containers, Networks, and Volumes.
 
-\*\*Components:\*\*
+---
 
-\- \*\*Docker Client\*\* – The CLI/tool used to interact with Docker (`docker build`, `docker run`, etc.)
-
-\- \*\*Docker Daemon (dockerd)\*\* – Background service that manages images, containers, networks, and volumes
-
-\- \*\*Docker Registry\*\* – Stores Docker images (e.g., Docker Hub); used to pull/push images
-
-\- \*\*Docker Objects\*\* – Images, Containers, Networks, Volumes
-
-
-
-\## 🧩 Core Concepts
-
-
+## 🧩 Core Concepts
 
 | Concept | Description |
+|---------|-------------|
+| **Dockerfile** | A text file containing step-by-step instructions to build a Docker image (base image, dependencies, commands, ports, etc.). |
+| **Docker Image** | A read-only template (blueprint) used to create containers. Built from a Dockerfile. |
+| **Docker Container** | A running (or stopped) instance of an image—the isolated environment where the application executes. |
+| **Docker Hub** | A cloud-based registry where Docker images are stored and shared publicly or privately. |
 
-|---|---|
+---
 
-| \*\*Dockerfile\*\* | A text file containing step-by-step instructions to build a Docker image (base image, dependencies, commands, ports, etc.) |
-
-| \*\*Docker Image\*\* | A read-only template/blueprint used to create containers. Built from a Dockerfile. |
-
-| \*\*Docker Container\*\* | A running (or stopped) instance of an image — the actual isolated environment where the app executes |
-
-| \*\*Docker Hub\*\* | A cloud-based registry where Docker images are stored and shared publicly/privately |
-
-
-
-\## ⚙️ Docker Networking
-
-
+## ⚙️ Docker Networking
 
 Docker provides several network drivers:
 
-
-
 | Network Type | Description |
+|--------------|-------------|
+| **Bridge (default)** | Containers on the same host communicate using an isolated private network. |
+| **Host** | Container shares the host's network stack directly (no network isolation). |
+| **None** | Container has no network connectivity. |
+| **Overlay** | Used for communication across multiple Docker hosts (typically Docker Swarm). |
 
-|---|---|
-
-| \*\*Bridge\*\* (default) | Containers on the same host can communicate via an internal private network |
-
-| \*\*Host\*\* | Container shares the host's network stack directly (no isolation) |
-
-| \*\*None\*\* | Container has no network access |
-
-| \*\*Overlay\*\* | Used for multi-host communication, typically in Docker Swarm |
-
-
+### Useful Commands
 
 ```bash
-
 docker network ls
-
-docker network create my\_network
-
-docker network inspect my\_network
-
+docker network create my_network
+docker network inspect my_network
 ```
 
+---
 
-
-\## 💾 Docker Volumes vs Docker Mounts
-
-
+## 💾 Docker Volumes vs Bind Mounts
 
 | Docker Volumes | Bind Mounts |
+|---------------|-------------|
+| Managed entirely by Docker. Stored under `/var/lib/docker/volumes`. | Maps a specific host directory or file into the container. |
+| Easier to back up, migrate, and share between containers. | Directly tied to the host filesystem. |
+| Recommended for persistent production data. | Useful during development (live code reload, editing files). |
 
-|---|---|
-
-| Managed entirely by Docker (stored in `/var/lib/docker/volumes`) | Maps a specific host directory/file into the container |
-
-| Easier to back up, migrate, and share between containers | Directly tied to host filesystem structure |
-
-| Recommended for persistent data | Useful for local development (live code reload, etc.) |
-
-
+### Commands
 
 ```bash
+docker volume create my_volume
 
-docker volume create my\_volume
+# Using a Docker volume
+docker run -v my_volume:/app/data myapp
 
-docker run -v my\_volume:/app/data myapp
-
-docker run -v /host/path:/container/path myapp   # bind mount
-
+# Using a bind mount
+docker run -v /host/path:/container/path myapp
 ```
 
+---
 
+## 🚀 Image Optimization Techniques
 
-\## 🚀 Image Optimization Techniques
+- **Use multi-stage builds** to separate build and runtime environments.
+- **Use slim or Alpine base images** (e.g., `python:3.11-slim`).
+- **Create a `.dockerignore` file** to exclude unnecessary files such as `.git`, `node_modules`, and logs.
+- **Reduce image layers** by combining commands with `&&`.
+- **Leverage Docker cache** by placing infrequently changing instructions before frequently changing ones.
 
-
-
-\- \*\*Multi-stage builds\*\* – Separate build and runtime stages to keep final image small
-
-\- \*\*Use slim/alpine base images\*\* – e.g., `python:3.11-slim` instead of `python:3.11`
-
-\- \*\*.dockerignore\*\* – Exclude unnecessary files (like `.git`, `node\_modules`) from build context
-
-\- \*\*Minimize layers\*\* – Combine `RUN` commands using `\&\&` to reduce image layers
-
-\- \*\*Order instructions properly\*\* – Place less-frequently changed instructions (like installing dependencies) before frequently changed ones (like copying source code) to leverage build cache
-
-
+### Example: Multi-stage Build
 
 ```dockerfile
-
-\# Example: Multi-stage build
-
 FROM node:18 AS build
 
 WORKDIR /app
 
 COPY . .
 
-RUN npm install \&\& npm run build
-
-
+RUN npm install && npm run build
 
 FROM nginx:alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
-
 ```
 
+---
 
+## 💻 Common Docker Commands
 
-\## 💻 Useful Commands
-
-
+### Images
 
 ```bash
-
-\# Images
-
 docker build -t myapp .
-
 docker images
-
-docker rmi <image\_id>
-
-
-
-\# Containers
-
-docker run -d -p 8080:80 --name mycontainer myapp
-
-docker ps                  # running containers
-
-docker ps -a                # all containers
-
-docker stop <container\_id>
-
-docker start <container\_id>
-
-docker restart <container\_id>
-
-docker rm <container\_id>
-
-
-
-\# Logs \& Debugging
-
-docker logs <container\_id>
-
-docker exec -it <container\_id> bash
-
-
-
-\# System
-
-docker system prune         # clean up unused data
-
-docker inspect <container\_id>
-
+docker pull nginx
+docker push username/myapp
+docker rmi <image_id>
 ```
 
+### Containers
 
+```bash
+docker run -d -p 8080:80 --name mycontainer myapp
+docker ps
+docker ps -a
+docker stop <container_id>
+docker start <container_id>
+docker restart <container_id>
+docker rm <container_id>
+```
 
-\## ❓ Interview Questions \& Answers
+### Logs & Debugging
 
+```bash
+docker logs <container_id>
+docker exec -it <container_id> bash
+docker inspect <container_id>
+```
 
+### Volumes
 
-\*\*Q1. CMD vs ENTRYPOINT — what's the difference?\*\*
+```bash
+docker volume ls
+docker volume create my_volume
+docker volume inspect my_volume
+docker volume rm my_volume
+```
 
-> `CMD` provides default arguments/commands that \*\*can be overridden\*\* when running the container (`docker run myapp <new-command>`). `ENTRYPOINT` defines a fixed command that \*\*always executes\*\*, and any arguments passed at runtime are appended to it rather than replacing it. They're often used together — `ENTRYPOINT` sets the executable, `CMD` sets default arguments.
+### Networks
 
+```bash
+docker network ls
+docker network create my_network
+docker network inspect my_network
+docker network rm my_network
+```
 
+### Cleanup
 
-\*\*Q2. docker run vs docker start — what's the difference?\*\*
+```bash
+docker system prune
+docker system prune -a
+docker image prune
+docker volume prune
+```
 
-> `docker run` creates a \*\*new container\*\* from an image and starts it. `docker start` restarts an \*\*existing (stopped) container\*\* without creating a new one.
+---
 
+# ❓ Interview Questions & Answers
 
+### Q1. CMD vs ENTRYPOINT — What's the difference?
 
-\*\*Q3. docker start vs docker exec — what's the difference?\*\*
+**Answer:**
 
-> `docker start` simply resumes a stopped container's main process. `docker exec` runs an \*\*additional command inside an already running container\*\* (e.g., opening a shell for debugging) without affecting the main process.
+- `CMD` provides the default command or arguments for a container.
+- It **can be overridden** when running the container.
+- `ENTRYPOINT` specifies the executable that always runs.
+- Arguments passed during `docker run` are appended to the `ENTRYPOINT`.
 
+Example:
 
+```dockerfile
+ENTRYPOINT ["python"]
+CMD ["app.py"]
+```
 
-\## 📚 Resources
+```bash
+docker run myapp
+```
 
-\- \[Docker Docs](https://docs.docker.com/)
+Runs:
 
-\- GeeksforGeeks Docker Tutorial (referenced for learning)
+```bash
+python app.py
+```
 
+```bash
+docker run myapp test.py
+```
+
+Runs:
+
+```bash
+python test.py
+```
+
+---
+
+### Q2. docker run vs docker start
+
+**docker run**
+
+- Creates a **new container** from an image.
+- Starts the container.
+- Used the first time.
+
+Example:
+
+```bash
+docker run nginx
+```
+
+**docker start**
+
+- Starts an **existing stopped container**.
+- Does **not** create a new container.
+
+Example:
+
+```bash
+docker start mycontainer
+```
+
+---
+
+### Q3. docker start vs docker exec
+
+**docker start**
+
+- Starts a stopped container.
+- Runs the container's main process.
+
+**docker exec**
+
+- Executes an additional command inside an already running container.
+- Commonly used for debugging.
+
+Example:
+
+```bash
+docker exec -it mycontainer bash
+```
+
+---
+
+### Q4. Image vs Container
+
+| Docker Image | Docker Container |
+|--------------|------------------|
+| Blueprint/template | Running instance of an image |
+| Read-only | Read-write |
+| Cannot execute by itself | Executes the application |
+| Can create multiple containers | Created from an image |
+
+---
+
+### Q5. What is the difference between a Volume and a Bind Mount?
+
+**Volume**
+
+- Managed by Docker.
+- Best for persistent application data.
+- Easier to migrate and back up.
+
+**Bind Mount**
+
+- Uses a host directory.
+- Good for development.
+- Changes on the host are immediately visible inside the container.
+
+---
+
+### Q6. Why do we use Docker?
+
+- Consistent environments across development, testing, and production.
+- Lightweight compared to virtual machines.
+- Fast startup.
+- Easy deployment.
+- Better resource utilization.
+- Simplifies dependency management.
+
+---
+
+### Q7. Why are containers lighter than virtual machines?
+
+Containers share the host operating system kernel instead of running a complete guest operating system. As a result, they require less memory, consume fewer resources, and start much faster than virtual machines.
+
+---
+
+## 📚 Resources
+
+- GeeksforGeeks Docker Tutorial
