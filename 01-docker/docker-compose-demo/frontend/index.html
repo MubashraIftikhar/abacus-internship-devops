@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Student Registration</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 500px; margin: 40px auto; }
+    input { display: block; margin: 10px 0; padding: 8px; width: 100%; }
+    button { padding: 8px 16px; }
+    table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+    td, th { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  </style>
+</head>
+<body>
+  <h2>Student Registration</h2>
+  <input type="text" id="name" placeholder="Name">
+  <input type="text" id="rollNo" placeholder="Roll No">
+  <button onclick="submitForm()">Submit</button>
+
+  <h3>Registered Students</h3>
+  <table id="studentTable">
+    <tr><th>Name</th><th>Roll No</th></tr>
+  </table>
+
+  <script>
+    const BACKEND_URL = 'http://localhost:5000';
+
+    async function submitForm() {
+      const name = document.getElementById('name').value;
+      const rollNo = document.getElementById('rollNo').value;
+
+      await fetch(`${BACKEND_URL}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, roll_no: rollNo })
+      });
+
+      loadStudents();
+    }
+
+    async function loadStudents() {
+      const res = await fetch(`${BACKEND_URL}/students`);
+      const data = await res.json();
+      const table = document.getElementById('studentTable');
+      table.innerHTML = '<tr><th>Name</th><th>Roll No</th></tr>';
+      data.forEach(s => {
+        table.innerHTML += `<tr><td>${s.name}</td><td>${s.roll_no}</td></tr>`;
+      });
+    }
+
+    loadStudents();
+  </script>
+</body>
+</html>
