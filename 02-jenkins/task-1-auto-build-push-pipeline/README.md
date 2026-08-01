@@ -7,6 +7,7 @@ Set up a fully automated CI/CD pipeline: whenever code is pushed to a private Gi
 - A private GitHub repository containing a `Dockerfile` and `Jenkinsfile`
 - Jenkins server running (with Docker plugin, GitHub plugin installed: As setup in Task0)
 - Docker Hub account (or other registry)
+- ngrok (to expose local Jenkins to the internet for GitHub webhooks)
 
 ## 🪜 Step-by-Step Walkthrough
 
@@ -22,71 +23,66 @@ Set up a fully automated CI/CD pipeline: whenever code is pushed to a private Gi
 
 ### Step 3: Add Credentials in Jenkins
 - Manage Jenkins → Credentials → Add Credentials
-- Added:
-  - GitHub PAT (as Secret Text / Username-Password)
-  - Docker Hub username & password (as Username-Password credential)
 
-### Step 4: Configure GitHub Webhook
+| Field | Value |
+|---|---|
+| Kind | Username with password |
+| Username | GitHub username |
+| Password | Personal Access Token |
+| ID | `github-creds` |
+
+### Step 4: Expose Jenkins to the Internet via ngrok
+Since GitHub needs to reach Jenkins over the internet, exposed the local Jenkins instance using ngrok:
+
+```bash
+ngrok config add-authtoken <token>
+ngrok http 8080
+```
+Generated a forwarding URL like `https://xxxx.ngrok-free.dev`
+
+> ⚠️ Free ngrok plans generate a new URL each restart — the GitHub webhook must be updated whenever this URL changes.
+
+### Step 5: Configure GitHub Webhook
 - In the GitHub repo → Settings → Webhooks → Add webhook
-- Payload URL: `http://<jenkins-server>/github-webhook/`
+- Payload URL: `https://<ngrok-url>/github-webhook/`
 - Content type: `application/json`
 - Event: Just the push event
 - This triggers Jenkins automatically on every push
 
-### Step 5: Configure Jenkins Job
+### Step 6: Configure Jenkins Job
 - Created a new Pipeline job
 - Under "Build Triggers" → enabled **GitHub hook trigger for GITScm polling**
 - Pointed the pipeline to fetch the `Jenkinsfile` from the private repo (using the credential from Step 3)
 
-### Step 6: Jenkinsfile Pipeline Logic
-```groovy
-pipeline {
-    agent any
-    environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds-id')
-        IMAGE_NAME = 'yourusername/your-image'
-    }
-    stages {
-        stage('Checkout') {
-            steps {
-                git credentialsId: 'github-pat-id', url: 'https://github.com/yourusername/your-private-repo.git'
-            }
-        }
-        stage('Build Image') {
-            steps {
-                sh 'docker build -t $IMAGE_NAME:latest .'
-            }
-        }
-        stage('Push to Docker Hub') {
-            steps {
-                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
-                sh 'docker push $IMAGE_NAME:latest'
-            }
-        }
-    }
-    post {
-        success {
-            echo 'Image built and pushed successfully!'
-        }
-        failure {
-            echo 'Pipeline failed.'
-        }
-    }
-}
-```
+### Pipeline Configuration
+| Setting        | Value                    |
+| -------------- | ------------------------ |
+| Definition     | Pipeline script from SCM |
+| SCM            | Git                      |
+| Repository URL | <username>/<repo>.git    |
+| Credentials    | github-creds             |
+| Branch         | */main                   |
+| Script Path    | Jenkinsfile              |
 
-### Step 7: Test the Automation
+### Step 7: Jenkinsfile Pipeline Logic
+File Attached for reference
+
+### Step 8: Test the Automation
 - Made a code change and pushed to the repo
 - Verified Jenkins auto-triggered the build (via webhook)
 - Confirmed a new image version appeared in Docker Hub
 
 ## ✅ Result
-On every `git push`, Jenkins automatically:
-1. Pulls latest code from the private repo
-2. Builds a new Docker image
-3. Pushes it to Docker Hub — fully automated, no manual builds needed
+After the push:
+1. GitHub sends a webhook request.
+2. Jenkins automatically starts a new pipeline.
+3. Jenkins checks out the latest code.
+4. A new Docker image is built.
+5. The previous container is removed.
+6. A new container is deployed.
 
 ## 🧠 Key Learnings
 - How Jenkins integrates with private GitHub repos securely using PATs
 - How webhooks enable real-time build triggers instead of polling
 - How to safely inject Docker registry credentials into a pipeline
+- How ngrok exposes a local Jenkins instance so GitHub webhooks can reach it
