@@ -4,7 +4,7 @@
 
 Jenkins is an open-source **automation server** used to build, test, and deploy software continuously — forming the backbone of CI/CD (Continuous Integration / Continuous Deployment) pipelines. It automates repetitive tasks like pulling code, building Docker images, running tests, and pushing artifacts, triggered automatically whenever code changes (e.g., via a GitHub push).
 
-## 🏗️ Necessary Components
+## 🏗️ Components
 
 | Component | Description |
 |---|---|
