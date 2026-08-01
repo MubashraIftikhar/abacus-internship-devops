@@ -19,6 +19,7 @@ graph LR
     B --> F[Volumes]
     B <-->|pull/push| G[Docker Registry<br/>Docker Hub]
 ```
+<img width="458" height="248" alt="image" src="https://github.com/user-attachments/assets/0b44a319-9239-4835-8498-fef8f2aaa1ce" />
 
 ### Components
 
