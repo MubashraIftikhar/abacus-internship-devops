@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>K8s Service Type Tester</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; background:#0f172a; color:#e2e8f0; margin:0; }
+  .container { max-width:700px; margin: 40px auto; padding:20px; }
+  h1 { text-align:center; color:#38bdf8; }
+  .card { background:#1e293b; border-radius:12px; padding:24px; margin-top:20px; box-shadow:0 4px 12px rgba(0,0,0,.4); }
+  .row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #334155; }
+  .row:last-child { border-bottom:none; }
+  .label { color:#94a3b8; }
+  .value { font-weight:bold; }
+  #pod-badge { display:inline-block; padding:4px 12px; border-radius:20px; color:#fff; font-weight:bold; }
+  .controls { text-align:center; margin-top:20px; }
+  button { background:#38bdf8; border:none; padding:10px 20px; border-radius:8px; font-weight:bold; cursor:pointer; margin:0 5px; }
+  button.active { background:#22c55e; }
+  #history { margin-top:20px; font-size:13px; color:#94a3b8; max-height:150px; overflow-y:auto; }
+  .pulse { animation: pulse 0.6s; }
+  @keyframes pulse { 0% {transform:scale(1);} 50%{transform:scale(1.03);} 100%{transform:scale(1);} }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Kubernetes Service Type Tester</h1>
+  <div class="card" id="card">
+    <div class="row"><span class="label">Serving Pod</span><span class="value"><span id="pod-badge">...</span></span></div>
+    <div class="row"><span class="label">Pod IP</span><span class="value" id="pod-ip">...</span></div>
+    <div class="row"><span class="label">Node</span><span class="value" id="node-name">...</span></div>
+    <div class="row"><span class="label">Namespace</span><span class="value" id="namespace">...</span></div>
+    <div class="row"><span class="label">Server Time (UTC)</span><span class="value" id="ts">...</span></div>
+    <div class="row"><span class="label">Requests seen</span><span class="value" id="count">0</span></div>
+  </div>
+  <div class="controls">
+    <button id="autoBtn" class="active" onclick="toggleAuto()">Auto-refresh: ON</button>
+    <button onclick="fetchInfo()">Refresh now</button>
+  </div>
+  <div class="card">
+    <strong>Unique pods seen this session:</strong>
+    <div id="history"></div>
+  </div>
+</div>
+<script>
+let count = 0, auto = true, timer = null;
+const seenPods = new Set();
+
+function hashColor(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  return "#" + (hash & 0x00FFFFFF).toString(16).toUpperCase().padStart(6, '0');
+}
+
+async function fetchInfo() {
+  try {
+    const res = await fetch('/api/info', {cache:'no-store'});
+    const data = await res.json();
+    count++;
+    document.getElementById('count').innerText = count;
+    document.getElementById('pod-ip').innerText = data.pod_ip;
+    document.getElementById('node-name').innerText = data.node_name;
+    document.getElementById('namespace').innerText = data.namespace;
+    document.getElementById('ts').innerText = data.timestamp;
+    const badge = document.getElementById('pod-badge');
+    badge.innerText = data.pod_name;
+    badge.style.background = hashColor(data.pod_name);
+    document.getElementById('card').classList.remove('pulse');
+    void document.getElementById('card').offsetWidth;
+    document.getElementById('card').classList.add('pulse');
+    if (!seenPods.has(data.pod_name)) {
+      seenPods.add(data.pod_name);
+      const div = document.createElement('div');
+      div.innerText = "• " + data.pod_name + " first seen at " + data.timestamp;
+      document.getElementById('history').prepend(div);
+    }
+  } catch (e) {
+    document.getElementById('pod-badge').innerText = "ERROR";
+  }
+}
+
+function toggleAuto() {
+  auto = !auto;
+  const btn = document.getElementById('autoBtn');
+  if (auto) {
+    btn.innerText = "Auto-refresh: ON"; btn.classList.add('active');
+    timer = setInterval(fetchInfo, 1500);
+  } else {
+    btn.innerText = "Auto-refresh: OFF"; btn.classList.remove('active');
+    clearInterval(timer);
+  }
+}
+
+fetchInfo();
+timer = setInterval(fetchInfo, 1500);
+</script>
+</body>
+</html>
