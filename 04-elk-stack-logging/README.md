@@ -1,49 +1,39 @@
-# ELK Stack Setup — Elasticsearch, Kibana & Filebeat on Ubuntu (systemd)
+# ELK Stack + Real-Time Error Alerting — Elasticsearch, Kibana, Filebeat, Dockerized Auth API
 
-A hands-on project setting up a self-hosted log monitoring pipeline using the Elastic Stack (Elasticsearch, Kibana, Filebeat), running as native systemd services on a single Ubuntu VM — including the real debugging process, not just the happy path.
-
----
-
-## 🎯 Goal
-
-Set up a working log monitoring pipeline where:
-1. **Elasticsearch** stores and indexes log data
-2. **Kibana** provides a UI to search and visualize that data
-3. **Filebeat** tails log files on the server and ships them to Elasticsearch automatically
-
-All three run as **systemd services** (not Docker), managed the same way as any other Linux service (`daemon-reload`, `enable`, `start`, `status`) — the goal being to understand the stack at the OS/service level rather than abstracting it away behind containers.
-
-**Why this matters:** centralized log shipping is standard practice the moment you have more than one server — "SSH in and grep the log file" doesn't scale. This project was built to understand each moving part (config files, REST APIs, service lifecycle) well enough to reason about it in a real production environment, not just get it running once.
+A self-hosted log monitoring and alerting pipeline built on the Elastic Stack
+(Elasticsearch, Kibana, Filebeat) running as native systemd services on a
+single Ubuntu VM, extended with a Dockerized demo application that generates
+real HTTP errors and a dedicated alerting index/dashboard for them.
 
 ---
 
-## 🧱 Architecture
-
-```
-Log files on disk (/var/log/*.log, syslog, custom app logs)
-          │
-          ▼
-      Filebeat  ──ships (HTTPS, Bulk API)──▶  Elasticsearch  ◀──queries (Search API)──  Kibana
-   (reads/tails)                              (stores/indexes)                         (visualizes)
-```
-
-- Elasticsearch: `https://localhost:9200`
-- Kibana: `http://localhost:5601`
-- Filebeat: no listening port — outbound shipper only
+## Table of contents
+- [Part 1 — Base ELK stack setup](#part-1--base-elk-stack-setup)
+- [Part 2 — Real error alerting pipeline](#part-2--real-error-alerting-pipeline)
+- [Architecture](#architecture)
+- [Key file locations](#key-file-locations)
 
 ---
+```mermaid
+flowchart TB
+    ES["Elasticsearch<br/>:9200<br/><i>Datastore</i>"]
+    KB["Kibana<br/>:5601<br/><i>GUI</i>"]
+    LS["Logstash<br/>:5044<br/><i>Filter, index</i>"]
+    MP["M.Processor"]
+    FB["Filebeat / Metricbeat<br/><i>(Shipper)</i>"]
 
-## 🛠️ What Was Done
-
-### 1. Prior state — cleaned up a conflicting Docker setup
-The Elastic Stack had previously been run via Docker containers for testing. Before installing the systemd-based services, leftover containers, images, and networks were removed to avoid port conflicts (9200/5601) and reclaim disk space:
-```bash
-docker ps -a
-sudo docker system prune -a --volumes
+    ES <--> KB
+    LS --> ES
+    MP --> LS
+    FB --> LS
 ```
+## Part 1 — Base ELK stack setup
 
-### 2. Installed Elasticsearch, Kibana, and Filebeat via APT
-Added Elastic's official package repository and GPG key, then installed all three components:
+**Goal:** get Elasticsearch, Kibana, and Filebeat running as systemd services
+on one VM, understanding each layer (config files, REST APIs, service
+lifecycle) rather than hiding it behind containers.
+
+### 1. Installed via APT
 ```bash
 wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list
@@ -51,7 +41,7 @@ sudo apt-get update
 sudo apt-get install elasticsearch kibana filebeat
 ```
 
-### 3. Enabled and started all three as systemd services
+### 2. Enabled and started as systemd services
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now elasticsearch
@@ -59,22 +49,15 @@ sudo systemctl enable --now kibana
 sudo systemctl enable --now filebeat
 ```
 
-### 4. Diagnosed and fixed a RED cluster / authentication failure
-`curl localhost:9200` initially returned an empty reply, later a `401`. Root cause tracing (via `journalctl -u elasticsearch`) revealed the disk was above the **90% high watermark**, which blocked Elasticsearch from allocating the internal `.security-7` index — meaning the `elastic` user's credentials couldn't be read *or* reset. This wasn't a password problem; it was a disk-space problem masquerading as one.
-
-**Fix:** freed disk space (the earlier Docker cleanup), restarted Elasticsearch, then reset the password successfully:
-```bash
-sudo /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic -f
-```
-
-### 5. Enrolled Kibana with Elasticsearch
-Generated a one-time enrollment token and used it in Kibana's browser setup screen to establish trust between the two services:
+### 3. Enrolled Kibana with Elasticsearch
 ```bash
 sudo /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana
 ```
+Token pasted into Kibana's browser setup screen to establish trust between
+the two services.
 
-### 6. Configured Filebeat to ship logs to Elasticsearch
-Edited `/etc/filebeat/filebeat.yml`:
+### 4. Configured the original Filebeat
+`/etc/filebeat/filebeat.yml`:
 ```yaml
 filebeat.inputs:
   - type: filestream
@@ -91,11 +74,7 @@ output.elasticsearch:
   ssl.verification_mode: none
 ```
 
-Along the way, fixed two config bugs:
-- **YAML indentation error** — a misaligned `ssl.verification_mode` line broke the entire file's structure (`did not find expected key`)
-- **Path typo** — `/var/logs/*.log` (extra "s") silently matched zero files; corrected to `/var/log/*.log`
-
-### 7. Verified the pipeline end-to-end
+### 5. Verified end-to-end
 ```bash
 sudo filebeat test config
 sudo filebeat test output
@@ -103,58 +82,137 @@ sudo filebeat setup -e          # loads index template + Kibana dashboards
 for i in {1..20}; do logger "filebeat test line $i - $(date)"; done
 curl -k -u "elastic:<password>" "https://localhost:9200/filebeat-*/_count?pretty"
 ```
-Confirmed a non-zero document count, then viewed the entries live in **Kibana → Discover** under the `filebeat-*` data view.
+Confirmed a non-zero doc count, then viewed entries live in **Kibana →
+Discover** under the `filebeat-*` data view.
 
-### 8. Documented safe shutdown/restart procedure
-Since an unclean shutdown risks Elasticsearch data corruption (in-memory data not flushed to disk), established the correct stop order:
-```bash
-sudo systemctl stop filebeat
-sudo systemctl stop kibana
-sudo systemctl stop elasticsearch
+<img width="1600" height="611" alt="image" src="https://github.com/user-attachments/assets/451c2b74-70e0-4966-8975-2e25cab77b49" />
+
+---
+
+## Part 2 — Real error alerting pipeline
+
+**Goal:** extend the base stack with a demo service that produces *real*
+HTTP errors (not simulated/random), ship those into their own index, build a
+dashboard around them, and alert by email when errors spike or the service
+goes silent.
+
+### Why a second Filebeat instance
+Filebeat has one global `output.elasticsearch` block. Rather than risk
+breaking the original pipeline's index template / ILM settings, a second,
+independent Filebeat instance was run — its own config, data dir, and
+systemd unit — dedicated solely to this new log source.
+
+### 1. Login API (the thing generating real errors)
+A small Flask app, containerized, exposing:
+
+| Route | Behavior |
+|---|---|
+| `GET /` | Browser-friendly login test page (form + buttons) |
+| `POST /login` | `{"username","password"}` → 200 + token on success, 401 logged on wrong creds |
+| `GET /orders` | Needs `Authorization: Bearer <token>` → 401 if missing, 403 if invalid, 200 if valid |
+| any other path | 404, logged |
+
+Every response — success **and** failure — writes one line to
+`/var/log/app/error.log` inside the container in this format:
 ```
-(reverse order on restart — all three are `enabled`, so they also auto-start on boot).
+2026-07-21T07:59:26.262767Z ERROR 401 /login - Unauthorized - invalid username or password (client=172.17.0.1)
+2026-07-21T08:04:02.118432Z INFO 200 /login - Login successful (client=172.17.0.1)
+```
+Nothing here is randomly generated — every line is a genuine response to a
+genuine request.
+
+
+Credentials defined in `app.py` (demo only):
+```python
+USERS = {
+    "admin": "S3cure!Pass",
+    "alice": "alicepw123",
+}
+```
+
+**Run it, bind-mounting the log dir out to the host:**
+```bash
+sudo mkdir -p /var/log/app-alerts
+sudo docker build -t login-api ./login-api
+sudo docker run -d --name login-api \
+  -p 8080:5000 \
+  -v /var/log/app-alerts:/var/log/app \
+  login-api
+```
+
+### 2. Second Filebeat instance — ships to a dedicated `alerts-*` index
+
+Dirs:
+```bash
+sudo mkdir -p /etc/filebeat-alerts /var/lib/filebeat-alerts /var/log/filebeat-alerts
+```
+
+`/etc/filebeat-alerts/filebeat.yml`:
+File Attached for reference
+
+### 4. Kibana dashboard
+- **Stack Management → Data Views** → create `alerts-*`, timestamp `@timestamp`
+- **Discover** → verify error/success lines stream in live
+- **Visualize Library → Lens** → Pie chart, `status_code` as Terms
+  aggregation (or "Split chart" by `status_code` for one pie per code) →
+  save
+<img width="1246" height="523" alt="image" src="https://github.com/user-attachments/assets/b6fcea3a-da8b-4b68-8f5f-d27044ed05c0" />
+
+
+### 5. Email alerting (Kibana Alerting → `.es-query` rules)
+Two rules, both actioned through an Email connector:
+1. **Error spike** — fires when `alerts-*` gets more than N docs matching
+   `status_code >= 400` in a 5-minute window
+2. **Service down** — fires when **zero** docs land in `alerts-*` for 5
+   minutes, implying the app/Filebeat stopped shipping
+
+<img width="541" height="256" alt="image" src="https://github.com/user-attachments/assets/2f4fb348-acc0-4f57-8e67-2b20c7d187ba" />
+---
+
+## Architecture
+
+```
+                     ┌────────────────────────┐
+                     │   login-api (Docker)   │
+                     │  Flask auth service    │
+                     └───────────┬────────────┘
+                                 │ writes
+                                 ▼
+                  /var/log/app-alerts/error.log   (host, bind mount)
+                                 │
+                                 ▼
+                 ┌──────────────────────────────┐
+                 │  filebeat-alerts (systemd)   │
+                 │  dissect + drop_fields       │
+                 └───────────────┬──────────────┘
+                                 │ HTTPS, Bulk API
+                                 ▼
+                    ┌────────────────────────┐
+                    │     Elasticsearch      │  https://localhost:9200
+                    │  index: alerts-*       │
+                    └───────────┬────────────┘
+                                 │ Search API / Alerting
+                                 ▼
+                    ┌────────────────────────┐
+                    │        Kibana          │  http://localhost:5601
+                    │  Discover + Dashboard   │
+                    │  Alerting → Email       │
+                    └────────────────────────┘
+
+(unchanged, running in parallel)
+Various host logs ──▶ filebeat (systemd) ──▶ Elasticsearch (filebeat-*)
+```
 
 ---
 
-## 🐛 Key Issues Hit & Root Causes
-
-| Issue | Symptom | Root Cause | Fix |
-|---|---|---|---|
-| Empty curl reply | `curl: (52) Empty reply from server` | ES 8.x defaults to HTTPS; was querying plain HTTP | Use `https://` + `-k` (self-signed cert) |
-| Password reset failing (exit 69/75) | `Cluster health is currently RED` | Disk usage >90%, blocking `.security-7` index allocation | Freed disk space (removed old Docker images/volumes) |
-| Filebeat config parse error | `yaml: line 169: did not find expected key` | `ssl.verification_mode` line had zero indentation | Corrected YAML indentation |
-| Zero documents indexed | `harvester: {open_files: 0}`, count stayed 0 | Typo in path: `/var/logs/*.log` instead of `/var/log/*.log` | Fixed path, restarted Filebeat |
-| `filebeat.yml` appeared empty in `nano` | Blank buffer on open | File was `-rw-------` root-only; opened without `sudo` | Reopened with `sudo nano` |
-
----
-
-## 📂 Key File Locations
+## Key file locations
 
 | Component | Config | Data | Logs |
 |---|---|---|---|
 | Elasticsearch | `/etc/elasticsearch/elasticsearch.yml` | `/var/lib/elasticsearch/` | `/var/log/elasticsearch/` |
 | Kibana | `/etc/kibana/kibana.yml` | `/var/lib/kibana/` | `/var/log/kibana/` |
-| Filebeat | `/etc/filebeat/filebeat.yml` | `/var/lib/filebeat/registry/` | `/var/log/filebeat/` |
+| Filebeat (original) | `/etc/filebeat/filebeat.yml` | `/var/lib/filebeat/registry/` | `/var/log/filebeat/` |
+| Filebeat (alerts) | `/etc/filebeat-alerts/filebeat.yml` | `/var/lib/filebeat-alerts/` | `/var/log/filebeat-alerts/` |
+| login-api | `login-api/app.py`, `Dockerfile` | n/a (stateless) | `/var/log/app-alerts/error.log` (host) |
 
 ---
-
-## ✅ Current Status
-
-- [x] Elasticsearch, Kibana, Filebeat installed and running as systemd services
-- [x] Elasticsearch authenticated (`elastic` user, password securely stored outside version control)
-- [x] Kibana enrolled and connected to Elasticsearch
-- [x] Filebeat actively shipping log data, confirmed via document count and Kibana Discover
-- [x] Safe shutdown/restart procedure documented and tested
-
-## 🔜 Possible Next Steps
-
-- Set up **Index Lifecycle Management (ILM)** to auto-delete old indices and prevent repeat disk-space incidents
-- Point Filebeat at real application logs instead of test data
-- Build custom Kibana dashboards for specific monitoring needs
-- Explore multi-node Elasticsearch for high availability (not needed at current scale)
-
----
-
-## ⚠️ Note on Secrets
-
-The `elastic` user password and any enrollment tokens used in this project are **not included** in this repository. If documenting your own setup, store credentials in a local, git-ignored file (e.g. `/etc/elastic-credentials/`) — never commit them.
