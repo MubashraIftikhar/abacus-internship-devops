@@ -1,0 +1,37 @@
+filebeat.inputs:
+  - type: filestream
+    id: app-error-logs
+    enabled: true
+    paths:
+      - /var/log/app-alerts/*.log
+    parsers:
+      - multiline:
+          pattern: '^\d{4}-\d{2}-\d{2}T'
+          negate: true
+          match: after
+
+processors:
+  - dissect:
+      tokenizer: "%{ts} %{level} %{status_code} %{path} - %{detail} (client=%{client_ip})"
+      field: "message"
+      target_prefix: ""
+      ignore_failure: true
+  - drop_fields:
+      fields: ["host", "agent", "ecs", "log", "input", "cloud", "tags"]
+      ignore_missing: true
+
+output.elasticsearch:
+  hosts: ["https://localhost:9200"]
+  username: "elastic"
+  password: "<redacted>"
+  ssl.verification_mode: none
+  index: "alerts-%{+yyyy.MM.dd}"
+
+setup.template.name: "alerts"
+setup.template.pattern: "alerts-*"
+setup.ilm.enabled: false
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat-alerts
