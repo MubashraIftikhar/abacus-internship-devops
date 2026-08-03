@@ -6,14 +6,13 @@ A hands-on, self-hosted observability stack built from scratch on a Linux VM to 
 
 ## 🎯 Goal
 
-The objective of this project was to understand **how observability tooling actually works under the hood**, not just use it as a black box. Specifically:
+The objective of this project was to understand **how observability tooling actually works under the hood**:
 
-- Stand up Prometheus, Node Exporter, and Grafana as **standalone systemd services** on a plain Linux VM (deliberately without Kubernetes, to understand the fundamentals first).
+- Stand up Prometheus, Node Exporter, and Grafana as **standalone systemd services** on a plain Linux VM.
 - Build a **custom instrumented application** (a login service) to see what it means to expose application-level metrics, not just system metrics.
 - Learn the full **scrape → store → query → visualize** pipeline.
 - Configure **alerting rules** on both application behavior (failed logins) and system health (CPU usage).
-- Wire up **real email notifications** with a professional, informative HTML template — so an alert doesn't just say "something's wrong," but explains *why*, *where*, and *what to check next*.
-
+- Wire up **email notifications**
 ---
 
 ## ✅ What Was Achieved
@@ -58,7 +57,6 @@ All components run as **native systemd services** directly on the VM (no Kuberne
 ### 1. Prometheus
 - Installed manually from the official GitHub release binary (not the outdated distro package) to get the latest version.
 - Configured via `/etc/prometheus/prometheus.yml` with scrape jobs for itself, Node Exporter, and the login app.
-- Runs with a retention policy (`--storage.tsdb.retention.time` / `.size`) to prevent disk exhaustion — a lesson learned after the VM's disk filled up during testing and crashed Prometheus with a `SIGBUS` error.
 
 ### 2. Node Exporter
 - Exposes host-level metrics by reading directly from the Linux kernel's `/proc` and `/sys` virtual filesystems (e.g. `/proc/stat` for CPU, `/proc/meminfo` for memory, `/proc/diskstats` for disk I/O).
