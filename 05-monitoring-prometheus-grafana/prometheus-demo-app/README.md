@@ -58,10 +58,15 @@ All components run as **native systemd services** directly on the VM (no Kuberne
 - Installed manually from the official GitHub release binary (not the outdated distro package) to get the latest version.
 - Configured via `/etc/prometheus/prometheus.yml` with scrape jobs for itself, Node Exporter, and the login app.
 
+  <img width="1150" height="682" alt="image" src="https://github.com/user-attachments/assets/393e2660-0b86-427d-98e2-c646509458db" />
+
+
 ### 2. Node Exporter
 - Exposes host-level metrics by reading directly from the Linux kernel's `/proc` and `/sys` virtual filesystems (e.g. `/proc/stat` for CPU, `/proc/meminfo` for memory, `/proc/diskstats` for disk I/O).
 - Runs a wide set of **collectors** enabled by default (`cpu`, `meminfo`, `diskstats`, `filesystem`, `netdev`, `loadavg`, and more) — each collector maps to a specific kernel data source.
 - No values are invented — Node Exporter is purely a translator from raw kernel counters into Prometheus's metric format.
+
+  
 
 ### 3. Custom Login App
 A minimal Flask application built specifically to generate realistic, non-trivial application metrics — moving beyond system-level monitoring into **application observability**.
@@ -73,6 +78,9 @@ A minimal Flask application built specifically to generate realistic, non-trivia
 - `login_request_duration_seconds` — histogram, request latency
 - `active_sessions` — gauge, currently logged-in sessions
 
+ <img width="920" height="473" alt="image" src="https://github.com/user-attachments/assets/6c10bf54-1169-4389-8412-79f544bf83d4" />
+
+
 Runs in Docker for isolation and portability, with routes supporting both a browser-based HTML login form and JSON API requests (curl/testing).
 
 ### 4. Grafana
@@ -80,6 +88,12 @@ Runs in Docker for isolation and portability, with routes supporting both a brow
 - Dashboards built for:
   - Login app metrics (attempt rate, failure breakdown by reason, active sessions, p95 latency)
   - Full system metrics via the community **Node Exporter Full** dashboard (Grafana.com ID `1860`) — covering CPU, memory, disk, and network without manually building each panel.
+<img width="1273" height="549" alt="image" src="https://github.com/user-attachments/assets/7df5d252-1017-414e-8ba3-48a312c54e27" />
+
+<img width="1273" height="705" alt="image" src="https://github.com/user-attachments/assets/e9e3522c-837c-4a3f-9dcd-d2d013345ca5" />
+
+<img width="1267" height="694" alt="image" src="https://github.com/user-attachments/assets/41c5fec8-009e-4fd7-a103-5021f4a09f76" />
+
 
 ### 5. Alerting
 - Alert rule (`cpuCheck`) defined directly in Grafana's native alerting engine, querying Prometheus:
@@ -89,10 +103,8 @@ Runs in Docker for isolation and portability, with routes supporting both a brow
   Condition: fires when CPU usage exceeds a configurable threshold (set low, at 20%, for easy observation/testing).
 - **Contact point** configured for email delivery via Gmail SMTP (using an App Password, since Gmail blocks standard password auth for SMTP).
 - **Custom HTML notification template** built so alert emails are informative and actionable rather than a bare threshold notice. Each email includes:
-  1. **Reason** — why the alert fired, with the actual metric value
-  2. **Instance** — which machine/target triggered it
-  3. **Status & severity**
-  4. **Recommended next steps** — a checklist of what to review (running processes, recent deployments, container stats, whether the load is expected or anomalous)
+
+ <img width="926" height="438" alt="image" src="https://github.com/user-attachments/assets/6fa4a747-69ff-4a41-9732-378f96c2fe4f" />
 
 ---
 
@@ -101,29 +113,11 @@ Runs in Docker for isolation and portability, with routes supporting both a brow
 1. **Installed Prometheus and Node Exporter** from official binaries, set up as systemd services with dedicated non-login system users for security.
 2. **Installed Grafana** via its official APT repository, run as its own systemd service.
 3. **Built and containerized a login app** in Flask, instrumented with `prometheus_client`, and added it as a Prometheus scrape target.
-4. **Diagnosed and fixed real infrastructure issues along the way**, including:
-   - A `Text file busy` error when overwriting a running binary
-   - A Docker build failure caused by broken container DNS resolution
-   - A full disk (`24G/24G` used) that crashed Prometheus with a `SIGBUS` fault — resolved via Docker image/cache pruning and journal log cleanup
-   - A malformed SMTP username (`user@gmail.com@gmail.com`) that caused Gmail to reject alert email authentication
 5. **Connected Grafana to Prometheus** as a data source and validated the connection.
 6. **Built dashboards** for both the custom login app and full VM system metrics.
 7. **Created and tested a CPU alert rule** in Grafana, using a deliberately low threshold to safely observe the full alert lifecycle: `Normal → Pending → Firing → Resolved`.
 8. **Configured Gmail SMTP** with an App Password and built a custom HTML email template so alerts are professional and immediately actionable.
 9. **Load-tested the alert** using `yes > /dev/null &` to simulate CPU saturation, confirming the alert fires and the email arrives correctly, then explored how such load could occur unintentionally (e.g. a rogue process or cron job) and how to guard against it using `cgroups`/`systemd` CPU quotas, `ulimit`, and restricting cron access.
-
----
-
-## 📸 Screenshots
-
-*(Add screenshots here — Prometheus targets page, Grafana dashboard, alert firing view, sample email)*
-
-```
-![Prometheus Targets](screenshots/prometheus-targets.png)
-![Grafana Dashboard](screenshots/grafana-dashboard.png)
-![Alert Firing](screenshots/alert-firing.png)
-![Sample Alert Email](screenshots/alert-email.png)
-```
 
 ---
 
@@ -145,22 +139,9 @@ Full step-by-step setup instructions are in [`/docs`](./docs).
 
 ---
 
-## 🔮 Possible Next Steps
-
-- Add alert rules for memory and disk space thresholds, using the same pattern as the CPU alert.
-- Enable the `systemd` and `processes` Node Exporter collectors to monitor the health of Prometheus, Grafana, and Docker themselves as metrics.
-- Add Slack/Discord as an additional notification channel alongside email.
-- Apply `cgroups`/`systemd` CPU quotas to the login app container to cap resource usage as a real safeguard, not just an alert.
-- Migrate the stack to Docker Compose for easier teardown/rebuild, or explore a Kubernetes-based deployment (`kube-prometheus-stack`) as a comparison to this standalone setup.
-
----
 
 ## 🛠️ Tech Stack
 
 `Prometheus` · `Node Exporter` · `Grafana` · `Flask` · `Docker` · `systemd` · `PromQL` · `Gmail SMTP`
 
 ---
-
-## 📄 License
-
-MIT — feel free to use this as a reference for your own monitoring setup.
